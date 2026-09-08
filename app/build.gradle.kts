@@ -142,10 +142,10 @@ android {
 //    }
 //}
 dependencies {
-    // 1. Material Components library (Fixes theme/resource linking errors)
+    // 1. Material Components library
     implementation("com.google.android.material:material:1.11.0")
 
-    // 2. SavedState & ViewModel integration (Fixes red imports in CleverKeyboardService)
+    // 2. SavedState & ViewModel integration
     implementation("androidx.savedstate:savedstate-ktx:1.2.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-savedstate:2.7.0")
@@ -179,8 +179,8 @@ dependencies {
     // Room Database
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    implementation("androidx.emoji2:emoji2-emojipicker:1.5.0")
     ksp("androidx.room:room-compiler:2.6.1")
 
-    implementation("androidx.emoji2:emojipicker:1.4.0")
+    // Correct Emoji Picker Dependency
+    implementation("androidx.emoji2:emoji2-emojipicker:1.5.0")
 }
