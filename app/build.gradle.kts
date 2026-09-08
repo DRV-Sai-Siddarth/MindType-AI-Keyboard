@@ -179,5 +179,8 @@ dependencies {
     // Room Database
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
+    implementation("androidx.emoji2:emoji2-emojipicker:1.5.0")
     ksp("androidx.room:room-compiler:2.6.1")
+
+    implementation("androidx.emoji2:emojipicker:1.4.0")
 }

@@ -54,10 +54,12 @@ import com.mindtype.ai.keyboard.ai.IAIEngineService
 import com.mindtype.ai.keyboard.clipboard.AppDatabase
 import com.mindtype.ai.keyboard.clipboard.ClipboardItem
 import com.mindtype.ai.keyboard.clipboard.ClipboardManagerHelper
+import com.mindtype.ai.keyboard.ui.AIDrawerLayout
+import com.mindtype.ai.keyboard.ui.GoogleEmojiPickerLayout
 import kotlinx.coroutines.delay
 
 enum class ShiftState { LOWER, SHIFT_ONCE, CAPS_LOCK }
-enum class KeyboardPage { QWERTY, SYMBOLS_PRIMARY, SYMBOLS_SECONDARY, EMOJI, CLIPBOARD }
+enum class KeyboardPage { QWERTY, SYMBOLS_PRIMARY, SYMBOLS_SECONDARY, EMOJI, CLIPBOARD, AI }
 
 class CleverKeyboardService : InputMethodService(),
     LifecycleOwner, ViewModelStoreOwner, SavedStateRegistryOwner {
@@ -318,7 +320,7 @@ fun StyledKeyboardEngineUI(
                 .padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BlueIconBadge("✨") { onAITrigger("Fix grammar and spelling") }
+            BlueIconBadge("✨") { page = KeyboardPage.AI }
             BlueIconBadge("📝") { onAITrigger("Rephrase and improve") }
             BlueIconBadge("🤖") { onAITrigger("Ask ChatGPT") }
             BlueIconBadge("📋") { page = KeyboardPage.CLIPBOARD }
@@ -377,6 +379,19 @@ fun StyledKeyboardEngineUI(
 
             Column(modifier = Modifier.alpha(keyAlpha)) {
                 when (page) {
+                    KeyboardPage.AI -> {
+                        AIDrawerLayout(
+                            onPromptSelect = { promptPrefix ->
+                                onAITrigger(promptPrefix)
+                                page = KeyboardPage.QWERTY
+                            },
+                            onCustomPromptSubmit = { customPrompt ->
+                                onAITrigger(customPrompt)
+                                page = KeyboardPage.QWERTY
+                            },
+                            onBackToQwerty = { page = KeyboardPage.QWERTY }
+                        )
+                    }
                     KeyboardPage.QWERTY -> {
                         QwertyLayout(
                             shiftState = shiftState,
@@ -442,7 +457,7 @@ fun StyledKeyboardEngineUI(
                     }
 
                     KeyboardPage.EMOJI -> {
-                        EmojiPickerLayout(
+                        GoogleEmojiPickerLayout(
                             onEmojiClick = { emoji -> onKeyPress(emoji) },
                             onBackToQwerty = { page = KeyboardPage.QWERTY }
                         )
