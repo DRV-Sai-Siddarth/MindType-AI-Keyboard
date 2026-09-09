@@ -78,12 +78,6 @@ android {
 //    // Coroutines
 //    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 //
-//    // Network Engine (Ktor Client for API calls)
-//    implementation("io.ktor:ktor-client-android:2.3.7")
-//    implementation("io.ktor:ktor-client-cio:2.3.7")
-//    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-//    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
-//
 //    // Security & Encrypted Storage
 //    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 //    implementation("androidx.datastore:datastore-preferences:1.0.0")
@@ -126,12 +120,6 @@ android {
 //        // Coroutines
 //        implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 //
-//        // Network Engine
-//        implementation("io.ktor:ktor-client-android:2.3.7")
-//        implementation("io.ktor:ktor-client-cio:2.3.7")
-//        implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-//        implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
-//
 //        // Security & Encrypted Storage
 //        implementation("androidx.security:security-crypto:1.1.0-alpha06")
 //        implementation("androidx.datastore:datastore-preferences:1.0.0")
@@ -142,6 +130,19 @@ android {
 //    }
 //}
 dependencies {
+
+
+    testImplementation("junit:junit:4.13.2")
+
+    // Instrumented Android Tests
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2023.08.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+
+    // Debugging / Previews
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     // 1. Material Components library
     implementation("com.google.android.material:material:1.11.0")
 
@@ -165,12 +166,6 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
-
-    // Network Engine
-    implementation("io.ktor:ktor-client-android:2.3.7")
-    implementation("io.ktor:ktor-client-cio:2.3.7")
-    implementation("io.ktor:ktor-client-content-negotiation:2.3.7")
-    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.7")
 
     // Security & Encrypted Storage
     implementation("androidx.security:security-crypto:1.1.0-alpha06")

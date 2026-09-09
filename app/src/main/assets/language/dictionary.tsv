@@ -1,0 +1,16 @@
+# Replace this package-owned model asset with the complete, locale-specific export
+# produced by your language-data pipeline. Schema: word<TAB>frequency
+about	5000
+after	4800
+and	9500
+are	9000
+good	6200
+hello	7100
+how	6800
+is	9800
+love	6900
+much	5700
+thank	6600
+the	10000
+today	5100
+you	9900

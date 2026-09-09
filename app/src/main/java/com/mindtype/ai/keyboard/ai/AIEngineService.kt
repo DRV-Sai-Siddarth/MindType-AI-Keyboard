@@ -21,10 +21,10 @@ class AIEngineService : Service() {
             activeJob = serviceScope.launch {
                 try {
                     if (preferRemote) {
-                        streamRemoteApi(prompt, callback)
-                    } else {
-                        streamLocalSlm(prompt, callback)
+                        callback.onError("Remote generation is disabled: this keyboard is offline-only.")
+                        return@launch
                     }
+                    streamLocalSlm(prompt, callback)
                     callback.onComplete()
                 } catch (e: Exception) {
                     callback.onError(e.localizedMessage ?: "Generation failed")
@@ -40,21 +40,9 @@ class AIEngineService : Service() {
     override fun onBind(intent: Intent?): IBinder = binder
 
     private suspend fun streamLocalSlm(prompt: String, callback: IAICallback) {
-        // Native llama.cpp JNI token streaming simulation
-        val dummyTokens = listOf("This ", "is ", "your ", "corrected ", "text ", "from ", "local ", "SLM.")
-        for (token in dummyTokens) {
-            delay(60) // Simulates streaming latency
-            callback.onTokenReceived(token)
-        }
-    }
-
-    private suspend fun streamRemoteApi(prompt: String, callback: IAICallback) {
-        // Ktor SSE client streaming simulation
-        val dummyTokens = listOf("Generated ", "response ", "via ", "Remote ", "LLM ", "API.")
-        for (token in dummyTokens) {
-            delay(40)
-            callback.onTokenReceived(token)
-        }
+        // A real local SLM implementation belongs behind this method (for example,
+        // a bundled JNI runtime). It intentionally has no network fallback.
+        callback.onError("No bundled local language model is configured.")
     }
 
     override fun onDestroy() {

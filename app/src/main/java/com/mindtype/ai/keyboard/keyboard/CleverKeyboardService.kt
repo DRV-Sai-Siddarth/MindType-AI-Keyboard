@@ -54,9 +54,14 @@ import com.mindtype.ai.keyboard.ai.IAIEngineService
 import com.mindtype.ai.keyboard.clipboard.AppDatabase
 import com.mindtype.ai.keyboard.clipboard.ClipboardItem
 import com.mindtype.ai.keyboard.clipboard.ClipboardManagerHelper
+import com.mindtype.ai.keyboard.engine.PredictiveEngine
+import com.mindtype.ai.keyboard.engine.TextNormalizer
 import com.mindtype.ai.keyboard.ui.AIDrawerLayout
 import com.mindtype.ai.keyboard.ui.GoogleEmojiPickerLayout
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 enum class ShiftState { LOWER, SHIFT_ONCE, CAPS_LOCK }
 enum class KeyboardPage { QWERTY, SYMBOLS_PRIMARY, SYMBOLS_SECONDARY, EMOJI, CLIPBOARD, AI }
@@ -67,6 +72,10 @@ class CleverKeyboardService : InputMethodService(),
     private var aiService: IAIEngineService? = null
     private var isBound = false
     private lateinit var clipboardHelper: ClipboardManagerHelper
+    private val predictiveEngine by lazy { PredictiveEngine.getInstance(this) }
+    private val keyboardScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var suggestionRequestVersion = 0L
+    private val suggestionsState = mutableStateOf<List<String>>(emptyList())
 
     private val lifecycleRegistry = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = lifecycleRegistry
@@ -97,6 +106,7 @@ class CleverKeyboardService : InputMethodService(),
 
         clipboardHelper = ClipboardManagerHelper(this)
         clipboardHelper.startListening()
+        predictiveEngine.initialize { result -> if (result.isSuccess) requestSuggestions() }
 
         try {
             val intent = Intent(this, com.mindtype.ai.keyboard.ai.AIEngineService::class.java)
@@ -131,12 +141,13 @@ class CleverKeyboardService : InputMethodService(),
                 StyledKeyboardEngineUI(
                     clipboardItems = clipboardItems,
                     onAITrigger = { prompt -> executeAITask(prompt) },
-                    onKeyPress = { char -> currentInputConnection?.commitText(char, 1) },
-                    onBackspace = { handleSingleBackspace() },
-                    onDeleteWord = { handleDeleteWordByWord() },
+                    suggestions = suggestionsState.value,
+                    onKeyPress = ::commitKey,
+                    onSuggestionSelected = ::commitSuggestion,
+                    onBackspace = { handleSingleBackspace(); requestSuggestions() },
+                    onDeleteWord = { handleDeleteWordByWord(); requestSuggestions() },
                     onCursorMove = { steps -> moveCursorByOffset(steps) },
-                    onEnter = { handleEnterAction() },
-                    getWordSuggestions = { getDynamicNextWordSuggestions() }
+                    onEnter = { learnFromEditorText(currentInputConnection?.getTextBeforeCursor(256, 0)?.toString().orEmpty()); handleEnterAction(); requestSuggestions() }
                 )
             }
         }
@@ -208,19 +219,55 @@ class CleverKeyboardService : InputMethodService(),
         ic.commitText("\n", 1)
     }
 
-    private fun getDynamicNextWordSuggestions(): List<String> {
-        val ic = currentInputConnection ?: return listOf("I", "the", "you")
-        val before = ic.getTextBeforeCursor(30, 0)?.toString()?.trim() ?: ""
+    private fun commitKey(text: String) {
+        val ic = currentInputConnection ?: return
+        val before = ic.getTextBeforeCursor(256, 0)?.toString().orEmpty()
+        if (TextNormalizer.isWordBoundary(text)) learnFromEditorText(before)
+        ic.commitText(text, 1)
+        requestSuggestions()
+    }
 
-        if (before.isEmpty()) return listOf("I", "the", "you")
-
-        val lastWord = before.split(" ").lastOrNull()?.lowercase() ?: ""
-        return when (lastWord) {
-            "how" -> listOf("are", "is", "do")
-            "thank" -> listOf("you", "so", "much")
-            "where" -> listOf("are", "is", "were")
-            else -> listOf("I", "the", "you")
+    private fun commitSuggestion(candidate: String) {
+        val ic = currentInputConnection ?: return
+        // Emoji candidates are inserted at the cursor. Word candidates replace the
+        // current token so selecting "hello" after "hel" never duplicates text.
+        if (candidate.any { !TextNormalizer.isWordCharacter(it) && it != '\'' && it != '\u2019' && it != '-' }) {
+            ic.commitText(candidate, 1)
+        } else {
+            val before = ic.getTextBeforeCursor(TextNormalizer.MAX_TOKEN_LENGTH, 0)?.toString().orEmpty()
+            val activeLength = trailingTokenLength(before)
+            if (activeLength > 0) ic.deleteSurroundingText(activeLength, 0)
+            ic.commitText("$candidate ", 1)
+            learnFromEditorText(before.dropLast(activeLength) + candidate)
         }
+        requestSuggestions()
+    }
+
+    private fun learnFromEditorText(textBeforeBoundary: String) {
+        val context = TextNormalizer.editorContext(textBeforeBoundary)
+        val typed = context.activePrefix.takeIf { it.isNotEmpty() } ?: context.previousWord ?: return
+        val prior = if (context.activePrefix.isNotEmpty()) context.previousWord else context.wordBeforePrevious
+        val beforePrior = if (context.activePrefix.isNotEmpty()) context.wordBeforePrevious else null
+        predictiveEngine.learnTypingPattern(prior, typed, beforePrior)
+    }
+
+    private fun requestSuggestions() {
+        val requestVersion = ++suggestionRequestVersion
+        val before = currentInputConnection?.getTextBeforeCursor(256, 0)?.toString().orEmpty()
+        keyboardScope.launch {
+            val candidates = predictiveEngine.getSuggestionsForEditorText(before)
+            if (requestVersion == suggestionRequestVersion) suggestionsState.value = candidates
+        }
+    }
+
+    private fun trailingTokenLength(text: String): Int {
+        var length = 0
+        for (index in text.lastIndex downTo 0) {
+            val character = text[index]
+            if (!TextNormalizer.isWordCharacter(character) && character != '\'' && character != '\u2019' && character != '-') break
+            length++
+        }
+        return length
     }
 
     private fun executeAITask(promptPrefix: String) {
@@ -281,6 +328,7 @@ class CleverKeyboardService : InputMethodService(),
         if (isBound) {
             try { unbindService(serviceConnection) } catch (e: Exception) { e.printStackTrace() }
         }
+        keyboardScope.cancel()
     }
 }
 
@@ -293,17 +341,13 @@ fun StyledKeyboardEngineUI(
     onDeleteWord: () -> Unit,
     onCursorMove: (Int) -> Unit,
     onEnter: () -> Unit,
-    getWordSuggestions: () -> List<String>
+    suggestions: List<String>,
+    onSuggestionSelected: (String) -> Unit
 ) {
     var page by remember { mutableStateOf(KeyboardPage.QWERTY) }
     var shiftState by remember { mutableStateOf(ShiftState.LOWER) }
     var lastShiftTapTime by remember { mutableLongStateOf(0L) }
-    var suggestions by remember { mutableStateOf(listOf<String>()) }
     var isTrackpadActive by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        suggestions = getWordSuggestions()
-    }
 
     Column(
         modifier = Modifier
@@ -350,15 +394,12 @@ fun StyledKeyboardEngineUI(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            val words = if (suggestions.size >= 3) suggestions else listOf("I", "the", "you")
-
-            words.take(3).forEachIndexed { index, word ->
+            suggestions.take(3).forEachIndexed { index, word ->
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .clickable {
-                            onKeyPress("$word ")
-                            suggestions = getWordSuggestions()
+                            onSuggestionSelected(word)
                         },
                     contentAlignment = Alignment.Center
                 ) {
@@ -368,6 +409,10 @@ fun StyledKeyboardEngineUI(
                 if (index < 2) {
                     Text("|", color = Color(0xFF22222A), fontSize = 16.sp)
                 }
+            }
+            repeat(3 - suggestions.take(3).size) { index ->
+                Spacer(modifier = Modifier.weight(1f))
+                if (index < 2) Text("|", color = Color(0xFF22222A), fontSize = 16.sp)
             }
         }
 
@@ -398,7 +443,6 @@ fun StyledKeyboardEngineUI(
                             onKeyInput = { char ->
                                 onKeyPress(char)
                                 if (shiftState == ShiftState.SHIFT_ONCE) shiftState = ShiftState.LOWER
-                                suggestions = getWordSuggestions()
                             },
                             onShiftClick = {
                                 val currentTime = System.currentTimeMillis()
@@ -414,7 +458,6 @@ fun StyledKeyboardEngineUI(
                             },
                             onBackspace = {
                                 onBackspace()
-                                suggestions = getWordSuggestions()
                             },
                             onDeleteWord = onDeleteWord,
                             onModeToggle = { page = KeyboardPage.SYMBOLS_PRIMARY },
@@ -428,7 +471,6 @@ fun StyledKeyboardEngineUI(
                         PrimarySymbolsLayout(
                             onKeyInput = { char ->
                                 onKeyPress(char)
-                                suggestions = getWordSuggestions()
                             },
                             onBackspace = onBackspace,
                             onDeleteWord = onDeleteWord,
@@ -444,7 +486,6 @@ fun StyledKeyboardEngineUI(
                         SecondarySymbolsLayout(
                             onKeyInput = { char ->
                                 onKeyPress(char)
-                                suggestions = getWordSuggestions()
                             },
                             onBackspace = onBackspace,
                             onDeleteWord = onDeleteWord,
@@ -964,11 +1005,7 @@ fun EmojiPickerLayout(
     onEmojiClick: (String) -> Unit,
     onBackToQwerty: () -> Unit
 ) {
-    val emojis = listOf(
-        "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣", "😊", "😇",
-        "🙂", "🙃", "😉", "😌", "😍", "🥰", "😘", "😗", "😙", "😚",
-        "😋", "😛", "😝", "😜", "🤪", "🤨", "🧐", "🤓", "😎", "🤩"
-    )
+    val emojis = emptyList<String>()
 
     Column(modifier = Modifier.height(220.dp)) {
         Row(
