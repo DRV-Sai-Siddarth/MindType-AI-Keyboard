@@ -21,9 +21,9 @@ import java.util.zip.GZIPInputStream
  */
 object AssetDataLoader {
     data class AssetConfiguration(
-        val dictionary: String = "language/dictionary.tsv",
-        val bigrams: String = "language/bigrams.tsv",
-        val trigrams: String = "language/trigrams.tsv",
+        val dictionary: String = "language/dictionary.tsv.gz",
+        val bigrams: String = "language/bigrams.tsv.gz",
+        val trigrams: String = "language/trigrams.tsv.gz",
         val emojis: String = "language/emojis.json"
     )
 

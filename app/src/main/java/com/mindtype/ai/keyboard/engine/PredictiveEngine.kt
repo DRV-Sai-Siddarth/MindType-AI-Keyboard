@@ -176,8 +176,12 @@ class PredictiveEngine private constructor(context: Context) {
 
     private fun mergeEmojiCandidates(words: List<String>, emojis: List<String>, limit: Int): List<String> {
         val result = ArrayList<String>(limit)
-        words.forEach { candidate -> if (result.size < limit && candidate !in result) result += candidate }
-        emojis.forEach { candidate -> if (result.size < limit && candidate !in result) result += candidate }
+        // Surface one contextual emoji in the visible three-slot suggestion strip
+        // instead of appending it after word candidates where it would never render.
+        words.firstOrNull()?.let(result::add)
+        emojis.firstOrNull()?.takeIf { it !in result }?.let(result::add)
+        words.drop(1).forEach { candidate -> if (result.size < limit && candidate !in result) result += candidate }
+        emojis.drop(1).forEach { candidate -> if (result.size < limit && candidate !in result) result += candidate }
         return result
     }
 

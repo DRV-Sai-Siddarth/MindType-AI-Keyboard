@@ -1,6 +1,7 @@
 package com.mindtype.ai.keyboard.engine
 
 import com.mindtype.ai.keyboard.engine.structures.RadixTrie
+import com.mindtype.ai.keyboard.engine.structures.EmojiIndex
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -31,5 +32,13 @@ class OfflineLanguageModelTest {
         assertEquals("", context.activePrefix)
         assertEquals("world", context.previousWord)
         assertEquals("hello", context.wordBeforePrevious)
+    }
+
+    @Test
+    fun emojiIndexSupportsForwardAndReverseLocalLookups() {
+        val index = EmojiIndex.fromKeywordMap(mapOf("happy" to listOf("😀", "😊")))
+
+        assertEquals(listOf("😀", "😊"), index.emojisFor("happy", 3))
+        assertEquals(listOf("happy"), index.keywordsFor("😀"))
     }
 }
